@@ -38,7 +38,6 @@ namespace umbriel {
       return twiceArea > 0.000001 && primaries.white.x > 0.0 && primaries.white.y > 0.0;
     }
 
-
   } // namespace
 
   std::optional<HdrStaticMetadata> hdrStaticMetadataFromEdid(std::span<const uint8_t> edid) {

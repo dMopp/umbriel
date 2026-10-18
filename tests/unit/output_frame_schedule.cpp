@@ -140,6 +140,4 @@ UMBRIEL_TEST(vrrFloorNeverDropsBelowTheMonitorRange) {
   CHECK_EQ(vrrFloorHz(30, 200, 165000), 165);
 }
 
-UMBRIEL_TEST(vrrFloorStaysOffWithoutAConfiguredMinimum) {
-  CHECK_EQ(vrrFloorHz(0, 48, 165000), 0);
-}
+UMBRIEL_TEST(vrrFloorStaysOffWithoutAConfiguredMinimum) { CHECK_EQ(vrrFloorHz(0, 48, 165000), 0); }

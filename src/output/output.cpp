@@ -39,10 +39,10 @@ extern "C" {
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
-#include <vector>
 #include <ctime>
 #include <drm_fourcc.h>
 #include <format>
+#include <vector>
 
 #ifdef TRACY_ENABLE
 #include <set>
