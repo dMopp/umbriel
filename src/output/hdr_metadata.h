@@ -23,10 +23,6 @@ namespace umbriel {
   // display's desired content luminances in cd/m², with unavailable fields left at zero.
   [[nodiscard]] std::optional<HdrStaticMetadata> hdrStaticMetadataFromEdid(std::span<const uint8_t> edid);
 
-  // Read and parse the EDID attached to a native DRM output. Nested and virtual
-  // outputs, unreadable EDIDs, and sinks without PQ static metadata return no value.
-  [[nodiscard]] std::optional<HdrStaticMetadata> hdrStaticMetadataForOutput(wlr_output* output);
-
   // Describe Umbriel's BT.2020 PQ composition together with the display target
   // volume. BT.2020/D65 is used when the display does not publish valid primaries.
   [[nodiscard]] wlr_output_image_description makeHdrOutputDescription(

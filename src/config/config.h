@@ -286,6 +286,9 @@ namespace umbriel {
     std::optional<double> scale;
     std::optional<int> transform;
     VrrMode vrr = VrrMode::Disabled;
+    // Lowest refresh rate in Hz adaptive sync may fall to while no fullscreen
+    // window is on the active workspace. 0 lets the panel go as low as it can.
+    int vrrMinRefresh = 0;
     bool focusAtStartup = false;
     // Global safety gate. Even a client async hint or a window-rule override
     // cannot request tearing unless the owning output enables it.

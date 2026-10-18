@@ -710,6 +710,7 @@ core_sources = files(
   'src/server/actions.cpp',
   'src/server/effects.cpp',
   'src/output/output.cpp',
+  'src/output/edid.cpp',
   'src/output/hdr_metadata.cpp',
   'src/input/seat.cpp',
   'src/input/keyboard.cpp',

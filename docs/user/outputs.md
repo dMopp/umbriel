@@ -46,6 +46,7 @@ and positions when the output becomes available again.
 | `scale` | float | `1.0` | Output scale from 0.25 to 4.0. |
 | `transform` | string | `"normal"` | Rotation or reflection. |
 | `vrr` | string | `"disabled"` | Variable refresh rate policy. |
+| `vrr_min_refresh` | int | `0` | Lowest refresh rate in Hz VRR may drop to without a fullscreen window, kept within the monitor's range. `0` disables the floor. |
 | `tearing` | bool | `false` | Allow eligible fullscreen windows to use asynchronous page flips. |
 | `direct_scanout` | bool | `true` | Allow eligible fullscreen buffers to bypass composition. |
 | `hdr` | string | `"off"` | HDR activation policy. |
@@ -179,6 +180,26 @@ vrr = "fullscreen"
 A focused window can override this policy through a
 [window rule](window-rules.md#settings-updated-while-a-window-is-open).
 Unsupported outputs remain at fixed refresh and produce a warning.
+
+`vrr_min_refresh` keeps the refresh rate from dropping below a floor while VRR
+is active and the active workspace has no fullscreen window. When nothing on
+screen changes for longer than the floor allows, Umbriel presents the last frame
+again. Fullscreen windows keep the full VRR range.
+
+```toml
+[output.DP-1]
+vrr = "always"
+vrr_min_refresh = 100
+```
+
+The key accepts 0 to 1000; values outside that are clamped with a config
+warning. The floor then stays inside what the monitor can do: it never drops
+below the bottom of the refresh range the monitor publishes in its EDID, and
+never exceeds the refresh rate of the active mode. On a 48-165 Hz monitor,
+`vrr_min_refresh = 30` acts as 48 and `vrr_min_refresh = 200` acts as 165,
+which makes the desktop behave like fixed refresh. Umbriel logs the floor it
+uses, and warns when it had to adjust the configured value. Each forced frame repeats the previous image with no new damage,
+so it costs far less than a full redraw.
 
 ### Tearing
 

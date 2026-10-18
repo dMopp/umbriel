@@ -181,6 +181,7 @@ namespace umbriel {
     static void onDestroy(wl_listener* listener, void* data);
     static int onFrameRetryTimer(void* data);
     static int onEffectFrameTimer(void* data);
+    static int onVrrFloorTimer(void* data);
 
     void handleFrame();
     void handleRequestState(void* data);
@@ -192,6 +193,11 @@ namespace umbriel {
     [[nodiscard]] bool autoHdrEligible(const View* view) const;
     [[nodiscard]] View* findAutoHdrCandidate() const;
     [[nodiscard]] bool configuredVrrEnabled() const;
+    // The configured VRR refresh floor in Hz, kept within the monitor's range, while it applies: adaptive sync active
+    // and no fullscreen window on the active workspace. 0 otherwise.
+    [[nodiscard]] int vrrFloorHz() const;
+    // Restart the countdown to the frame that keeps adaptive sync above its floor.
+    void armVrrFloor();
     void setHdrFallbackReason(std::string_view reason);
     void setBitDepthFallbackReason(std::string_view reason);
     void updateSceneSdrWhite();
@@ -213,6 +219,8 @@ namespace umbriel {
     wlr_output* m_output = nullptr;
     float m_defaultScale = 1.0F;
     std::optional<HdrStaticMetadata> m_hdrStaticMetadata;
+    // Bottom of the sink's refresh range from its EDID, when it publishes one.
+    std::optional<int> m_edidMinRefreshHz;
     std::optional<float> m_runtimeSdrWhite;
     wlr_scene_output* m_sceneOutput = nullptr;
     wlr_scene_tree* m_layerTrees[kLayerCount]{};
@@ -252,6 +260,8 @@ namespace umbriel {
     bool m_appliedConfiguredScale = false;
     wl_event_source* m_frameRetryTimer = nullptr;
     wl_event_source* m_effectFrameTimer = nullptr;
+    wl_event_source* m_vrrFloorTimer = nullptr;
+    int m_loggedVrrFloorHz = 0;
     uint64_t m_lastEffectFrameMsec = 0;
     bool m_effectFrameDue = false;
     bool m_effectFrameArmed = false;

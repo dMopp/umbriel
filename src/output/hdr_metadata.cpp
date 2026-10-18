@@ -2,16 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <memory>
 
 extern "C" {
 #include <libdisplay-info/info.h>
-#if UMBRIEL_HAS_DRM_BACKEND
-#include <unistd.h>
-#include <wlr/backend/drm.h>
-#include <xf86drmMode.h>
-#endif
 }
 
 namespace umbriel {
@@ -44,28 +38,6 @@ namespace umbriel {
       return twiceArea > 0.000001 && primaries.white.x > 0.0 && primaries.white.y > 0.0;
     }
 
-#if UMBRIEL_HAS_DRM_BACKEND
-    struct FdCloser {
-      void operator()(int* fd) const {
-        if (fd != nullptr) {
-          close(*fd);
-          delete fd;
-        }
-      }
-    };
-
-    struct ObjectPropertiesDeleter {
-      void operator()(drmModeObjectProperties* properties) const { drmModeFreeObjectProperties(properties); }
-    };
-
-    struct PropertyDeleter {
-      void operator()(drmModePropertyRes* property) const { drmModeFreeProperty(property); }
-    };
-
-    struct PropertyBlobDeleter {
-      void operator()(drmModePropertyBlobRes* blob) const { drmModeFreePropertyBlob(blob); }
-    };
-#endif
 
   } // namespace
 
@@ -94,51 +66,6 @@ namespace umbriel {
       metadata.maxFrameAverageLuminance = std::min(metadata.maxFrameAverageLuminance, metadata.maxLuminance);
     }
     return metadata;
-  }
-
-  std::optional<HdrStaticMetadata> hdrStaticMetadataForOutput(wlr_output* output) {
-#if UMBRIEL_HAS_DRM_BACKEND
-    if (output == nullptr || !wlr_output_is_drm(output)) {
-      return std::nullopt;
-    }
-
-    const int rawFd = wlr_drm_backend_get_non_master_fd(output->backend);
-    if (rawFd < 0) {
-      return std::nullopt;
-    }
-    const std::unique_ptr<int, FdCloser> fd(new int(rawFd));
-    const uint32_t connectorId = wlr_drm_connector_get_id(output);
-    const std::unique_ptr<drmModeObjectProperties, ObjectPropertiesDeleter> properties(
-        drmModeObjectGetProperties(*fd, connectorId, DRM_MODE_OBJECT_CONNECTOR)
-    );
-    if (!properties) {
-      return std::nullopt;
-    }
-
-    for (uint32_t index = 0; index < properties->count_props; ++index) {
-      const std::unique_ptr<drmModePropertyRes, PropertyDeleter> property(
-          drmModeGetProperty(*fd, properties->props[index])
-      );
-      if (!property
-          || (property->flags & DRM_MODE_PROP_BLOB) == 0
-          || std::strcmp(property->name, "EDID") != 0
-          || properties->prop_values[index] == 0) {
-        continue;
-      }
-      const std::unique_ptr<drmModePropertyBlobRes, PropertyBlobDeleter> blob(
-          drmModeGetPropertyBlob(*fd, properties->prop_values[index])
-      );
-      if (!blob || blob->data == nullptr || blob->length == 0) {
-        return std::nullopt;
-      }
-      return hdrStaticMetadataFromEdid(
-          std::span(static_cast<const uint8_t*>(blob->data), static_cast<size_t>(blob->length))
-      );
-    }
-#else
-    (void)output;
-#endif
-    return std::nullopt;
   }
 
   wlr_output_image_description makeHdrOutputDescription(

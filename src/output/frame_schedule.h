@@ -43,6 +43,32 @@ namespace umbriel {
     return elapsed >= interval ? 1 : std::max<uint64_t>(1, interval - elapsed);
   }
 
+  // The VRR refresh floor in Hz, kept within what the monitor can do: never below the bottom of its refresh range
+  // (`monitorMinHz`, from the EDID) and never above the mode's refresh rate, so the floor never asks for more than
+  // the configured mode. `modeRefreshMHz` is rounded to the nearest hertz, since modes like 165 Hz often report
+  // 164.999. A 0 for either bound means unknown and leaves that side open.
+  [[nodiscard]] inline int vrrFloorHz(int configuredHz, int monitorMinHz, int modeRefreshMHz) {
+    if (configuredHz <= 0) {
+      return 0;
+    }
+    const int floor = std::max(configuredHz, monitorMinHz);
+    if (modeRefreshMHz <= 0) {
+      return floor;
+    }
+    return std::min(floor, (modeRefreshMHz + 500) / 1000);
+  }
+
+  // Delay after a presentation before forcing another frame, so adaptive sync never lets the refresh rate fall below
+  // `minHz`. The timer counts whole milliseconds, so the period is rounded down and one more millisecond is left for
+  // the render and commit that follow. 0 when no floor is set.
+  [[nodiscard]] inline uint64_t vrrFloorDelayMs(int minHz) {
+    if (minHz <= 0) {
+      return 0;
+    }
+    const uint64_t period = 1000 / static_cast<uint64_t>(minHz);
+    return period > 2 ? period - 1 : 1;
+  }
+
   // The latest vblank at or before `nowNs` on the cadence of the last presentation: evenly spaced per output, yet
   // never ahead of now. Projecting forward to the next vblank instead would put a slow output's instant up to a whole
   // period ahead of a fast one's; outputs share one animation state, so the fast output would then repeat frames.

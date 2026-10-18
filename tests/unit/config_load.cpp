@@ -1459,6 +1459,25 @@ UMBRIEL_TEST(outputVrrPolicyLoadsAndDefaultsDisabled) {
   CHECK(store.config().outputs[0].vrr == VrrMode::Disabled);
 }
 
+UMBRIEL_TEST(outputVrrMinRefreshLoadsAndDefaultsOff) {
+  const TempConfig file;
+  ConfigStore& store = umbriel::configStore();
+  store.setRootPath(file.path(), true);
+
+  file.write("[output.DP-1]\nvrr = \"always\"\nvrr_min_refresh = 100\n");
+  CHECK(store.reload().success);
+  CHECK_EQ(store.config().outputs[0].vrrMinRefresh, 100);
+
+  file.write("[output.DP-1]\nvrr_min_refresh = 5000\n");
+  CHECK(store.reload().success);
+  CHECK_EQ(store.config().outputs[0].vrrMinRefresh, 1000);
+  CHECK(containsDiagnostic(store, "vrr_min_refresh = 5000 out of range"));
+
+  file.write("[output.DP-1]\n");
+  CHECK(store.reload().success);
+  CHECK_EQ(store.config().outputs[0].vrrMinRefresh, 0);
+}
+
 UMBRIEL_TEST(outputTearingPermissionLoadsAndDefaultsDisabled) {
   const TempConfig file;
   ConfigStore& store = umbriel::configStore();

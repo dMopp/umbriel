@@ -63,6 +63,7 @@ files = []
 # position = [0, 0]
 # scale = 1.25
 # vrr = "fullscreen"
+# vrr_min_refresh = 100 # Floor for VRR while no window is fullscreen; 0 is off.
 # hdr = "auto"
 # sdr_transfer = "gamma22" # Or "srgb" for piecewise SDR decoding in HDR.
 

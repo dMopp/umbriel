@@ -52,6 +52,8 @@ Output state and workspace inventory are independent effects.
 - Changing an output's `sdr_transfer` reapplies output state and redraws with
   the selected SDR curve while HDR is active. Removing the key restores gamma
   2.2. Saving an unchanged choice has no output-state effect.
+- Changing an output's `vrr_min_refresh` has no output-state effect. The new
+  floor applies from the output's next presented frame.
 - Reapplying output state clears session-scoped output-management enablement,
   including state retained for a disconnected monitor, before the file is
   applied. An identical reload keeps that runtime state because it has no

@@ -9,6 +9,7 @@
 #include "layer/layer_surface.h"
 #include "lock/session_lock.h"
 #include "output/cursor_plane_pace.h"
+#include "output/edid.h"
 #include "output/format_sequence.h"
 #include "output/frame_schedule.h"
 #include "output/gamma_transition.h"
@@ -38,6 +39,7 @@ extern "C" {
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <vector>
 #include <ctime>
 #include <drm_fourcc.h>
 #include <format>
@@ -107,9 +109,11 @@ namespace umbriel {
   }
 
   Output::Output(Server& server, wlr_output* output)
-      : m_server(&server), m_output(output), m_defaultScale(output->scale),
-        m_hdrStaticMetadata(hdrStaticMetadataForOutput(output)) {
+      : m_server(&server), m_output(output), m_defaultScale(output->scale) {
     m_output->data = this;
+    const std::vector<uint8_t> edid = outputEdid(output);
+    m_hdrStaticMetadata = hdrStaticMetadataFromEdid(edid);
+    m_edidMinRefreshHz = edidMinRefreshHz(edid);
     wlr_output_init_render(m_output, m_server->allocator(), m_server->renderer());
     // Create the scene output before the initial configuration so startup and
     // resume modesets carry rendered content instead of wlroots' empty buffer.
@@ -870,6 +874,17 @@ namespace umbriel {
     return effectiveVrrEnabled(outputMode, fullscreen, focusedMode, focusedFullscreen);
   }
 
+  int Output::vrrFloorHz() const {
+    if (!m_output->enabled || m_dpmsOff || m_output->adaptive_sync_status != WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED) {
+      return 0;
+    }
+    const OutputRule* rule = findOutputRule(config(), identity());
+    if (rule == nullptr || rule->vrrMinRefresh <= 0 || hasFullscreenView()) {
+      return 0;
+    }
+    return umbriel::vrrFloorHz(rule->vrrMinRefresh, m_edidMinRefreshHz.value_or(0), m_output->refresh);
+  }
+
   bool Output::hasFullscreenView(const View* ignored) const {
     const Workspace* workspace = m_workspaceGroup != nullptr ? m_workspaceGroup->active() : nullptr;
     return workspace != nullptr && std::ranges::any_of(workspace->allViews(), [ignored](const View* view) {
@@ -948,6 +963,7 @@ namespace umbriel {
     } else {
       kLog.info("output '{}': VRR {}", m_output->name, enabled ? "enabled" : "disabled");
       m_server->updateOutputManagerConfig();
+      armVrrFloor();
     }
     wlr_output_state_finish(&state);
   }
@@ -1184,6 +1200,10 @@ namespace umbriel {
     if (m_effectFrameTimer != nullptr) {
       wl_event_source_remove(m_effectFrameTimer);
       m_effectFrameTimer = nullptr;
+    }
+    if (m_vrrFloorTimer != nullptr) {
+      wl_event_source_remove(m_vrrFloorTimer);
+      m_vrrFloorTimer = nullptr;
     }
     if (m_animationRenderLocked) {
       wlr_output_lock_attach_render(m_output, false);
@@ -1471,6 +1491,45 @@ namespace umbriel {
       wl_event_source_timer_update(m_effectFrameTimer, 0);
       m_effectFrameArmed = false;
     }
+  }
+
+  int Output::onVrrFloorTimer(void* data) {
+    auto* self = static_cast<Output*>(data);
+    if (self->vrrFloorHz() > 0 && outputFrameAllowed(self->m_server->stopping(), self->m_server->session())) {
+      // Nothing changed on screen, so this frame commits the last image again with empty damage: a cheap repaint
+      // whose only job is the page flip that keeps the panel at or above the floor. Its presentation re-arms the timer.
+      wlr_output_update_needs_frame(self->m_output);
+    }
+    return 0;
+  }
+
+  void Output::armVrrFloor() {
+    const int floorHz = vrrFloorHz();
+    if (floorHz > 0 && floorHz != m_loggedVrrFloorHz) {
+      m_loggedVrrFloorHz = floorHz;
+      const OutputRule* rule = findOutputRule(config(), identity());
+      const int configuredHz = rule != nullptr ? rule->vrrMinRefresh : 0;
+      const int modeHz = (m_output->refresh + 500) / 1000;
+      if (floorHz != configuredHz) {
+        kLog.warn(
+            "output '{}': vrr_min_refresh = {} is outside the monitor's range ({}-{} Hz), using {} Hz", m_output->name,
+            configuredHz, m_edidMinRefreshHz.value_or(0), modeHz, floorHz
+        );
+      } else {
+        kLog.info("output '{}': VRR floor {} Hz", m_output->name, floorHz);
+      }
+    }
+    const uint64_t delay = vrrFloorDelayMs(floorHz);
+    if (delay == 0) {
+      if (m_vrrFloorTimer != nullptr) {
+        wl_event_source_timer_update(m_vrrFloorTimer, 0);
+      }
+      return;
+    }
+    if (m_vrrFloorTimer == nullptr) {
+      m_vrrFloorTimer = wl_event_loop_add_timer(wl_display_get_event_loop(m_server->display()), onVrrFloorTimer, this);
+    }
+    wl_event_source_timer_update(m_vrrFloorTimer, static_cast<int>(delay));
   }
 
   void Output::applyMode(int width, int height, int refreshMHz) {
@@ -1918,6 +1977,7 @@ namespace umbriel {
           ? static_cast<uint64_t>(event->when.tv_sec) * 1'000'000'000 + static_cast<uint64_t>(event->when.tv_nsec)
           : 0;
       m_refreshNs = fixedRefresh ? static_cast<uint64_t>(event->refresh) : 0;
+      armVrrFloor();
     }
     if (SessionLock* lock = m_server->sessionLock()) {
       lock->handleOutputPresent(*this, event->commit_seq, event->presented);
