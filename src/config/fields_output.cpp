@@ -216,6 +216,23 @@ namespace umbriel {
           registry::real("scale", 0.25, 4.0, &O::scale),
           registry::real("render_scale", 0.25, 4.0, &O::renderScale),
           registry::choice("vrr", &O::vrr, vrrModes()),
+          custom<O>(
+              "vrr_min_refresh", KeyDescription("int_or_string").withValues({"max"}).withRange(0, 1000),
+              [](const toml::node& node, const std::string& path, O& target, registry::ReadContext&) {
+                if (const auto value = node.value<std::int64_t>()) {
+                  const auto used = std::clamp(*value, static_cast<std::int64_t>(0), static_cast<std::int64_t>(1000));
+                  if (used != *value) {
+                    warnAt(node.source(), "{} = {} out of range, clamped to {}", path, *value, used);
+                  }
+                  target.vrrMinRefresh = static_cast<int>(used);
+                } else if (node.value<std::string>() == "max") {
+                  target.vrrMinRefresh = kVrrMinRefreshMax;
+                } else {
+                  warnAt(node.source(), R"(ignoring {} (expected integer 0-1000 or "max"))", path);
+                }
+              },
+              [](const O& defaults) { return nlohmann::ordered_json(defaults.vrrMinRefresh); }
+          ),
           registry::choice("hdr", &O::hdr, hdrModes()),
           registry::real("sdr_white", 80.0, 1000.0, &O::sdrWhite),
           registry::choice(

@@ -24,6 +24,9 @@
 
 namespace umbriel {
 
+  // `vrr_min_refresh = "max"`: the floor is the refresh rate of the active mode.
+  inline constexpr int kVrrMinRefreshMax = -1;
+
   struct ConfigReloadResult;
 
   // Direction along which an output's workspaces are arranged. Scrolling layouts
@@ -332,6 +335,10 @@ namespace umbriel {
     std::optional<double> renderScale;
     std::optional<int> transform;
     VrrMode vrr = VrrMode::Disabled;
+    // Lowest refresh rate in Hz adaptive sync may fall to while no fullscreen
+    // window is on the active workspace. 0 lets the panel go as low as it can;
+    // kVrrMinRefreshMax ("max") follows the refresh rate of the active mode.
+    int vrrMinRefresh = 0;
     bool focusAtStartup = false;
     // Global safety gate. Even a client async hint or a window-rule override
     // cannot request tearing unless the owning output enables it.

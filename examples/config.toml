@@ -73,6 +73,7 @@ files = []
 # scale = 1.25
 # render_scale = 2.0 # Supersample: clients render at 2.0, compositor samples down to `scale`.
 # vrr = "fullscreen"
+# vrr_min_refresh = 100 # Floor for VRR while no window is fullscreen; "max" = mode refresh, 0 is off.
 # hdr = "auto"
 # sdr_transfer = "gamma22" # Or "srgb" for piecewise SDR decoding in HDR.
 # color_profile = "edid" # Or a factory ICC path; with sdr_gamut = "srgb" a characterized panel describes itself to tagged clients.

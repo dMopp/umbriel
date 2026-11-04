@@ -52,6 +52,7 @@ unit_tests = [
   ['output-hdr-transition', ['unit/output_hdr_transition.cpp'], []],
   ['output-format-sequence', ['unit/output_format_sequence.cpp'], []],
   ['output-gamma-transition', ['unit/output_gamma_transition.cpp'], []],
+  ['edid', ['unit/edid.cpp'], [umbriel_core_dep]],
   ['hdr-metadata', ['unit/hdr_metadata.cpp'], [umbriel_core_dep]],
   # Client-ICC cases skip at runtime when lcms2 is absent at build time.
   ['color-description', ['unit/color_description.cpp'], [umbriel_core_dep]],
