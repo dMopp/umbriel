@@ -34,6 +34,8 @@ namespace umbriel {
 
   enum class TitleBarMode : uint8_t { On, Negotiated, Forced, Off };
 
+  // How the scene samples a source that shrinks into its destination.
+  enum class DownsampleMode : uint8_t { Box, Bilinear, Nearest };
   enum class TitleBarButtonGlyph : uint8_t { Always, Hover, Never };
 
   enum class ModifierKey {
@@ -799,6 +801,12 @@ namespace umbriel {
         bool operator==(const TabBar&) const = default;
       } tabBar;
       bool preferNoCsd = true;
+
+      // Sampling method for sources the scene shrinks into their destination:
+      // the render_scale supersample downsample, scaled-down windows, and
+      // thumbnails. Box averages the source's texel footprint; the others
+      // point- or linear-sample a single texel.
+      DownsampleMode downsample = DownsampleMode::Box;
 
       int totalBorderWidth() const { return borderWidth + outerBorderWidth; }
       bool operator==(const Appearance&) const = default;
