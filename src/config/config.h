@@ -322,6 +322,9 @@ namespace umbriel {
     std::optional<OutputMode> mode;
     std::optional<std::array<int, 2>> position;
     std::optional<double> scale;
+    // Scale clients are asked to render at; the compositor samples the larger
+    // buffers down to the `scale` raster. Unset follows the logical scale.
+    std::optional<double> renderScale;
     std::optional<int> transform;
     VrrMode vrr = VrrMode::Disabled;
     bool focusAtStartup = false;
@@ -1076,6 +1079,8 @@ namespace umbriel {
       // Present outputs to X11 clients at their physical resolution, so they render at native size instead of being
       // upscaled on scaled outputs. Requires restart.
       bool xwaylandNativeResolution = false;
+      // Expose render-scale pixels to native X11 clients instead of physical pixels. Requires restart.
+      bool forceX11Supersample = false;
       // Run an XSETTINGS manager in Xwayland that announces the X screen scale and cursor theme. Requires restart.
       bool xwaylandXsettings = true;
       // Connector or monitor identity to publish as the X11 primary. Empty leaves RandR unmanaged.
