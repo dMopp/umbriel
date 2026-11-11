@@ -231,6 +231,7 @@ if build_tests
     'optimized-blur-encoded-cache',
     'optimized-blur-size-change',
     'optimized-blur-copy-failure',
+    'box-downsample-curves',
     'gamma22-to-srgb',
     'pq-roundtrip',
     'bt2020-to-srgb',
@@ -271,6 +272,22 @@ if build_tests
   test(
     'capture-pacing',
     umbrielfx_capture_pacing_test,
+    suite: 'umbrielfx',
+  )
+
+  umbrielfx_downsample_test = executable(
+    'umbrielfx-downsample-test',
+    'tests/downsample.c',
+    c_args: umbrielfx_c_args,
+    dependencies: umbrielfx_deps,
+    include_directories: [umbrielfx_inc, umbrielfx_internal_inc],
+    link_with: umbrielfx_lib,
+    build_by_default: false,
+  )
+
+  test(
+    'downsample',
+    umbrielfx_downsample_test,
     suite: 'umbrielfx',
   )
 
