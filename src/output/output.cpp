@@ -1314,27 +1314,18 @@ namespace umbriel {
   }
 
   void Output::updateVrr() {
-    // wlroots rejects adaptive-sync commits on disabled outputs; nothing to
-    // update while the monitor is off.
+    // A disabled output picks up VRR from applyConfiguredState when it is enabled again.
     if (!m_output->adaptive_sync_supported || !m_output->enabled) {
       return;
     }
-    const bool enabled = configuredVrrEnabled();
     const bool currentlyEnabled = m_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
-    if (enabled == currentlyEnabled) {
+    if (configuredVrrEnabled() == currentlyEnabled) {
       return;
     }
-
-    wlr_output_state state{};
-    wlr_output_state_init(&state);
-    wlr_output_state_set_adaptive_sync_enabled(&state, enabled);
-    if (!wlr_output_commit_state(m_output, &state)) {
-      kLog.warn("output '{}': failed to {} VRR", m_output->name, enabled ? "enable" : "disable");
-    } else {
-      kLog.info("output '{}': VRR {}", m_output->name, enabled ? "enabled" : "disabled");
-      m_server->updateOutputManagerConfig();
-    }
-    wlr_output_state_finish(&state);
+    // Apply with the next frame commit: a separate commit supersedes the pending page flip, and wlroots then never
+    // resolves that frame's presentation feedback, stalling clients that pace on it.
+    m_vrrPending = true;
+    wlr_output_schedule_frame(m_output);
   }
 
   wlr_output_layout_output* Output::addToLayout() {
@@ -1694,12 +1685,17 @@ namespace umbriel {
     }
     updateOptimizedBlur(outputArea);
 
-    // Layer trees are output-local; pin them to the scene-output origin.
+    // Layer trees are output-local; pin them to the scene-output origin. They are clipped to the output like the
+    // content roots below, so a layer surface (or its popup) larger than its output, or pushed past an edge by its
+    // margins, never renders on, or takes input from, a neighbouring output. The clip is the rounded-up layerArea the
+    // surfaces are configured against, so at fractional scales a full-output layer still covers the last physical row.
     for (auto& m_layerTree : m_layerTrees) {
       wlr_scene_node_set_position(&m_layerTree->node, m_sceneOutput->x, m_sceneOutput->y);
+      wlr_scene_tree_set_clip(m_layerTree, &layerArea);
     }
     for (auto* popupTree : m_layerPopupTrees) {
       wlr_scene_node_set_position(&popupTree->node, m_sceneOutput->x, m_sceneOutput->y);
+      wlr_scene_tree_set_clip(popupTree, &layerArea);
     }
 
     // Content roots are clipped to this output's layout box, not repositioned: views are laid out in layout
@@ -2191,10 +2187,11 @@ namespace umbriel {
       return;
     }
 
-    // Render + commit only if the scene actually changed or a gamma upload is pending. All exit paths below MUST reach
-    // the unconditional wlr_scene_output_send_frame_done call at the bottom: mailbox/FIFO clients (games via DXVK,
-    // video players) block on wl_surface.frame before submitting their next buffer. If we skip frame_done on the
-    // "nothing to render" path, they never commit again, damage stays clean, and the output stops producing frames.
+    // Render + commit only if the scene actually changed or a gamma upload or VRR change is pending. All exit paths
+    // below MUST reach the unconditional wlr_scene_output_send_frame_done call at the bottom: mailbox/FIFO clients
+    // (games via DXVK, video players) block on wl_surface.frame before submitting their next buffer. If we skip
+    // frame_done on the "nothing to render" path, they never commit again, damage stays clean, and the output stops
+    // producing frames.
     bool commitFailed = false;
     // Sample the plane before the needs_frame test below: a cursor-only move
     // damages nothing else, so this frame is the only commit that can carry
@@ -2225,7 +2222,7 @@ namespace umbriel {
         m_server->updateOutputManagerConfig();
       }
     }
-    if (!hdrTransitionPending && (sceneChanged || m_gammaDirty)) {
+    if (!hdrTransitionPending && (sceneChanged || m_gammaDirty || m_vrrPending)) {
       m_inFrame = true;
       if (effectFrame) {
         ++m_effectFrames;
@@ -2283,7 +2280,22 @@ namespace umbriel {
         }
 
         const bool hasBuffer = (state.committed & WLR_OUTPUT_STATE_BUFFER) != 0;
-        bool commitTearing = requestTearing && hasBuffer;
+        std::optional<bool> vrrChange;
+        if (m_vrrPending && hasBuffer) {
+          m_vrrPending = false;
+          const bool enabled = configuredVrrEnabled();
+          if (enabled != (m_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED)) {
+            wlr_output_state_set_adaptive_sync_enabled(&state, enabled);
+            if (wlr_output_test_state(m_output, &state)) {
+              vrrChange = enabled;
+            } else {
+              state.committed &= ~WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED;
+              kLog.warn("output '{}': failed to {} VRR", m_output->name, enabled ? "enable" : "disable");
+            }
+          }
+        }
+        // Async page flips cannot change VRR_ENABLED.
+        bool commitTearing = requestTearing && hasBuffer && !vrrChange;
         const bool recoveringFromFailedCommit = m_tearingRecovery.regularCommitPending();
         bool backendRejectedTearing = false;
         if (commitTearing) {
@@ -2304,6 +2316,14 @@ namespace umbriel {
         }
         if (hasBuffer) {
           m_tearingRecovery.recordCommit(commitTearing, commitOk);
+        }
+        if (vrrChange) {
+          if (commitOk) {
+            kLog.info("output '{}': VRR {}", m_output->name, *vrrChange ? "enabled" : "disabled");
+            m_server->updateOutputManagerConfig();
+          } else {
+            m_vrrPending = true;
+          }
         }
         if (commitOk && gammaPending) {
           m_gammaDirty = false;
