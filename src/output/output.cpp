@@ -147,6 +147,13 @@ namespace umbriel {
       return std::to_string(blob.size()) + ":" + std::to_string(hash);
     }
 
+    // Whether the workspace holds a mapped window in layout or client fullscreen, other than `ignored`.
+    bool holdsFullscreenView(const Workspace* workspace, const View* ignored = nullptr) {
+      return workspace != nullptr && std::ranges::any_of(workspace->allViews(), [ignored](const View* view) {
+               return view != ignored && view->mapped() && (view->layoutFullscreen() || view->currentFullscreen());
+             });
+    }
+
 #ifdef TRACY_ENABLE
     // Tracy keeps a plot's name pointer and reads it while a capture runs, so
     // the per-output names live for the rest of the process.
@@ -596,7 +603,7 @@ namespace umbriel {
 
     // "native" stages no SDR output transform at all: pixels stay bit-identical
     // to an uncharacterized output even with a profile configured. The protocol
-    // descriptions follow the same rule — they name the sRGB destination the
+    // descriptions follow the same rule: they name the sRGB destination the
     // renderer writes, so a client that tags with them renders identically too
     // (see ColorManager::descriptionForOutput).
     if (gamut == SdrGamut::Native) {
@@ -1222,10 +1229,19 @@ namespace umbriel {
   }
 
   bool Output::hasFullscreenView(const View* ignored) const {
-    const Workspace* workspace = m_workspaceGroup != nullptr ? m_workspaceGroup->active() : nullptr;
-    return workspace != nullptr && std::ranges::any_of(workspace->allViews(), [ignored](const View* view) {
-             return view != ignored && view->mapped() && (view->layoutFullscreen() || view->currentFullscreen());
-           });
+    return holdsFullscreenView(m_workspaceGroup != nullptr ? m_workspaceGroup->active() : nullptr, ignored);
+  }
+
+  bool Output::hasFullscreenViewOnAnyWorkspace() const {
+    if (m_workspaceGroup == nullptr) {
+      return false;
+    }
+    for (size_t index = 0; index < m_workspaceGroup->workspaceCount(); ++index) {
+      if (holdsFullscreenView(m_workspaceGroup->workspaceAt(index))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   bool Output::fullscreenCoversOutput() const {
@@ -1319,21 +1335,6 @@ namespace umbriel {
       m_server->updateOutputManagerConfig();
     }
     wlr_output_state_finish(&state);
-  }
-
-  bool Output::hasFullscreenViewOnAnyWorkspace() const {
-    if (m_workspaceGroup == nullptr) {
-      return false;
-    }
-    for (size_t index = 0; index < m_workspaceGroup->workspaceCount(); ++index) {
-      const Workspace* workspace = m_workspaceGroup->workspaceAt(index);
-      if (workspace != nullptr && std::ranges::any_of(workspace->allViews(), [](const View* view) {
-            return view->mapped() && (view->layoutFullscreen() || view->currentFullscreen());
-          })) {
-        return true;
-      }
-    }
-    return false;
   }
 
   wlr_output_layout_output* Output::addToLayout() {

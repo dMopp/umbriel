@@ -136,7 +136,7 @@ namespace umbriel {
     const std::string& resolvedColorProfile() const { return m_resolvedColorProfile; }
     // Active panel characterization (ICC > EDID), resolved independently of
     // sdr_gamut so diagnostics can report what was measured. Callers that put
-    // it on the wire must gate on the rendering destination first — see
+    // it on the wire must gate on the rendering destination first; see
     // ColorManager::descriptionForOutput. Null when uncharacterized.
     const PanelColorimetry* panelColorimetry() const { return m_panelColorimetry ? &*m_panelColorimetry : nullptr; }
     // Raw ICC bytes behind get_information's icc_file advertising: the exact
